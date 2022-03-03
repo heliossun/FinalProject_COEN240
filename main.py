@@ -11,7 +11,7 @@ from gensim.parsing.preprocessing import remove_stopwords, preprocess_string
 from pprint import pprint
 from copy import deepcopy
 from gensim import models
-
+import collections
 
 def pre_processing(docs):
     tokenizer = RegexpTokenizer(r"\w+(?:[-'+]\w+)*|\w+")
@@ -47,19 +47,48 @@ def prepare_corpus(corpus1):
     bow_corpus = [dictionary.doc2bow(doc) for doc in corpus1]
     return dictionary, bow_corpus
 
-def backbone(transformer_type, bow_corpus):
+def backbone(transformer_type, corpus, bow_corpus, model_path=''):
     #initialize feature extraction model
     model = None
+    new_corpus = None
     if transformer_type == "CVS":
         pass
     elif transformer_type == "TF_IDF":
         model = models.TfidfModel(bow_corpus)
+        new_corpus = [model[dictionary.doc2bow(doc)]for doc in corpus]
     elif transformer_type == "LDA":
         pass
     else:
-        pass
-    return model
-def train():
+        train_corpus = [models.doc2vec.TaggedDocument(token, [i])for i, token in enumerate(corpus)]
+        if model_path != '':
+            model = models.doc2vec.Doc2Vec.load(model_path)
+        else:
+            vector_size = 100
+            min_count = 3
+            epochs = 10
+            model = models.doc2vec.Doc2Vec(vector_size = vector_size,min_count=min_count,epochs=epochs)#vector size can be set from 100-300
+            model.build_vocab(train_corpus)
+            print('>>>>>>>>>>>>>> start training doc2vec <<<<<<<<<<<<')
+            model.train(train_corpus, total_examples=model.corpus_count, epochs=model.epochs)
+            print('>>>>>>>>>>>>>> model saved <<<<<<<<<<<<')
+            model.save(f'./workdir/w2v_{vector_size}_{min_count}_{epochs}.py')
+            #print('>>>>>>>>>>>>>> assessing the model <<<<<<<<<<<<')
+            #assesModel(model, train_corpus)
+        new_corpus=[model[train_corpus[doc_id].words]for doc_id in range(len(train_corpus))]
+
+def assesModel(model, train_corpus):
+    ranks = []
+    second_ranks = []
+    for doc_id in range(len(train_corpus)):
+        inferred_vector = model.infer_vector(train_corpus[doc_id].words)
+        sims = model.docvecs.most_similar([inferred_vector], topn=len(model.docvecs))
+        rank = [docid for docid, sim in sims].index(doc_id)
+        ranks.append(rank)
+        second_ranks.append(sims[1])
+    counter = collections.Counter(ranks)
+    print(counter)
+
+def train(transformer_type, model_path):
     # load dataset
     dataset = fetch_20newsgroups(subset='all', shuffle=False, remove=('headers', 'footers', 'quotes'))
     corpus = dataset.data  # save as the raw docs
@@ -67,11 +96,9 @@ def train():
     labels = dataset.target  # labels for clustering evaluation or supervised tasks
     dictionary, bow_corpus = prepare_corpus(corpus1)
     print(bow_corpus[0])
-    transform_model = backbone("TF_IDF", bow_corpus)
-    bow_corpus = [dictionary.doc2bow(doc) for doc in corpus1]
-    new_corpus = [transform_model[dictionary.doc2bow(doc)]for doc in corpus1]
+    new_corpus = backbone(transformer_type, corpus1, bow_corpus,model_path)
     print(new_corpus[0])
 
 
 if __name__ == '__main__':
-    train()
+    train('d2v','./workdir/w2v_100_3_40.py')
