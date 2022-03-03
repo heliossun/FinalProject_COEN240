@@ -47,19 +47,23 @@ def prepare_corpus(corpus1):
     bow_corpus = [dictionary.doc2bow(doc) for doc in corpus1]
     return dictionary, bow_corpus
 
-def backbone(transformer_type, corpus, bow_corpus, model_path=''):
+def backbone(transformer_type, corpus, dictionary, bow_corpus, model_path=''):
     #initialize feature extraction model
-    model = None
-    new_corpus = None
-    if transformer_type == "CVS":
+    new_corpus = []
+    if transformer_type == 'CVS':
         pass
-    elif transformer_type == "TF_IDF":
-        model = models.TfidfModel(bow_corpus)
+    elif transformer_type == 'TF_IDF':
+        if model_path!='':
+            model = models.TfidfModel.load(model_path)
+        else:
+            model = models.TfidfModel(bow_corpus)
+            model.save('./workdir/tf_idf.py')
         new_corpus = [model[dictionary.doc2bow(doc)]for doc in corpus]
-    elif transformer_type == "LDA":
+    elif transformer_type == 'LDA':
         pass
     else:
         train_corpus = [models.doc2vec.TaggedDocument(token, [i])for i, token in enumerate(corpus)]
+        print(train_corpus[:2])
         if model_path != '':
             model = models.doc2vec.Doc2Vec.load(model_path)
         else:
@@ -74,7 +78,8 @@ def backbone(transformer_type, corpus, bow_corpus, model_path=''):
             model.save(f'./workdir/w2v_{vector_size}_{min_count}_{epochs}.py')
             #print('>>>>>>>>>>>>>> assessing the model <<<<<<<<<<<<')
             #assesModel(model, train_corpus)
-        new_corpus=[model[train_corpus[doc_id].words]for doc_id in range(len(train_corpus))]
+        new_corpus=[model.infer_vector(doc)for doc in corpus]
+    return new_corpus
 
 def assesModel(model, train_corpus):
     ranks = []
@@ -96,7 +101,7 @@ def train(transformer_type, model_path):
     labels = dataset.target  # labels for clustering evaluation or supervised tasks
     dictionary, bow_corpus = prepare_corpus(corpus1)
     print(bow_corpus[0])
-    new_corpus = backbone(transformer_type, corpus1, bow_corpus,model_path)
+    new_corpus = backbone(transformer_type, corpus1, dictionary, bow_corpus,model_path)
     print(new_corpus[0])
 
 
