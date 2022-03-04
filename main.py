@@ -12,6 +12,8 @@ from pprint import pprint
 from copy import deepcopy
 from gensim import models
 import collections
+from sklearn.cluster import KMeans
+from gensim.matutils import corpus2dense, corpus2csc
 
 def pre_processing(docs):
     tokenizer = RegexpTokenizer(r"\w+(?:[-'+]\w+)*|\w+")
@@ -58,12 +60,12 @@ def backbone(transformer_type, corpus, dictionary, bow_corpus, model_path=''):
         else:
             model = models.TfidfModel(bow_corpus)
             model.save('./workdir/tf_idf.py')
-        new_corpus = [model[dictionary.doc2bow(doc)]for doc in corpus]
+        new_corpus = [model[doc]for doc in bow_corpus]  #corpus tfidf
     elif transformer_type == 'LDA':
         pass
     else:
         train_corpus = [models.doc2vec.TaggedDocument(token, [i])for i, token in enumerate(corpus)]
-        print(train_corpus[:2])
+        #print(train_corpus[:2])
         if model_path != '':
             model = models.doc2vec.Doc2Vec.load(model_path)
         else:
@@ -91,19 +93,28 @@ def assesModel(model, train_corpus):
         ranks.append(rank)
         second_ranks.append(sims[1])
     counter = collections.Counter(ranks)
-    print(counter)
+    #print(counter)
 
-def train(transformer_type, model_path):
+def docClustering(transformer_type, model_path):
     # load dataset
     dataset = fetch_20newsgroups(subset='all', shuffle=False, remove=('headers', 'footers', 'quotes'))
     corpus = dataset.data  # save as the raw docs
     corpus1 = list(pre_processing(corpus))
-    labels = dataset.target  # labels for clustering evaluation or supervised tasks
+    gnd = dataset.target  # labels for clustering evaluation or supervised tasks length is 18846
+    semantic_labels = dataset.target_names
     dictionary, bow_corpus = prepare_corpus(corpus1)
-    print(bow_corpus[0])
+    #print(bow_corpus[0])
     new_corpus = backbone(transformer_type, corpus1, dictionary, bow_corpus,model_path)
-    print(new_corpus[0])
+
+    km = KMeans(n_clusters = 10,
+                          init = 'k-means++',
+                          max_iter = 30, n_init = 10)
+    #km.fit(new_corpus)
+    #clusters = km.labels_.tolist()
+    #print(len(clusters))
+    #print(clusters)
+    #print(new_corpus[0])
 
 
 if __name__ == '__main__':
-    train('d2v','./workdir/w2v_100_3_40.py')
+    docClustering('TF_IDF','./workdir/tf_idf.py')
