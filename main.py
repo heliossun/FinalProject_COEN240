@@ -14,7 +14,7 @@ from gensim import models
 import collections
 from sklearn.cluster import KMeans
 from gensim.matutils import corpus2dense, corpus2csc
-
+import seaborn as sns
 def pre_processing(docs):
     tokenizer = RegexpTokenizer(r"\w+(?:[-'+]\w+)*|\w+")
     en_stop = get_stop_words('en')
@@ -60,7 +60,11 @@ def backbone(transformer_type, corpus, dictionary, bow_corpus, model_path=''):
         else:
             model = models.TfidfModel(bow_corpus)
             model.save('./workdir/tf_idf.py')
-        new_corpus = [model[doc]for doc in bow_corpus]  #corpus tfidf
+        new_corpus = model[bow_corpus]  #corpus tfidf
+        num_docs = len(new_corpus)
+        num_terms = len(dictionary.keys())
+        print('length of fict keys',num_terms)
+        new_corpus = corpus2dense(new_corpus, num_terms, num_docs)
     elif transformer_type == 'LDA':
         pass
     else:
@@ -99,22 +103,28 @@ def docClustering(transformer_type, model_path):
     # load dataset
     dataset = fetch_20newsgroups(subset='all', shuffle=False, remove=('headers', 'footers', 'quotes'))
     corpus = dataset.data  # save as the raw docs
-    corpus1 = list(pre_processing(corpus))
+    corpus1 = list(pre_processing(corpus[:1000]))
     gnd = dataset.target  # labels for clustering evaluation or supervised tasks length is 18846
-    semantic_labels = dataset.target_names
+    #semantic_labels = dataset.target_names
     dictionary, bow_corpus = prepare_corpus(corpus1)
-    #print(bow_corpus[0])
+    true_k = np.unique(gnd).shape[0]
     new_corpus = backbone(transformer_type, corpus1, dictionary, bow_corpus,model_path)
-
-    km = KMeans(n_clusters = 10,
+    #print(true_k)
+    km = KMeans(n_clusters = true_k,
                           init = 'k-means++',
-                          max_iter = 30, n_init = 10)
-    #km.fit(new_corpus)
-    #clusters = km.labels_.tolist()
-    #print(len(clusters))
-    #print(clusters)
-    #print(new_corpus[0])
+                          max_iter = 5, n_init = 10)
+    km.fit(new_corpus)
+    clusters = km.labels_.tolist()
+    print(len(clusters))
+    sns.set_theme()
+    fig = plt.figure()
+    fig, ax = plt.subplots(1,1, figsize=(12,6))
+
+    for i in range(len(new_corpus)):
+        ax.scatter(new_corpus[i,0],new_corpus[i,1],alpha=.8,label=clusters[i])
+    ax.legend(fancybox=True, framealpha=0.5)
+    fig.savefig('./temp.png', dpi=fig.dpi)
 
 
 if __name__ == '__main__':
-    docClustering('TF_IDF','./workdir/tf_idf.py')
+    docClustering('TF_IDF','')
