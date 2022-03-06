@@ -1,6 +1,9 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+import pyLDAvis
+import pyLDAvis.gensim_models
+from copy import deepcopy
 from sklearn.datasets import fetch_20newsgroups
 from collections import defaultdict
 from nltk.tokenize import RegexpTokenizer
@@ -14,7 +17,10 @@ from gensim import models
 import collections
 from sklearn.cluster import KMeans
 from gensim.matutils import corpus2dense, corpus2csc
+from gensim.models import LdaModel
 import seaborn as sns
+
+
 def pre_processing(docs):
     tokenizer = RegexpTokenizer(r"\w+(?:[-'+]\w+)*|\w+")
     en_stop = get_stop_words('en')
@@ -33,22 +39,26 @@ def pre_processing(docs):
 def prepare_corpus(corpus1):
 
     # remove words that appear only
-    freqs = defaultdict(int)
-    for doc in corpus1:
-        for w in doc:
-            freqs[w] += 1
+    # freqs = defaultdict(int)
+    # for doc in corpus1:
+    #     for w in doc:
+    #         freqs[w] += 1
 
     #preprocessing dictionary
     dictionary = corpora.Dictionary(corpus1)
-    low_tf_tokens = [w for w in freqs if freqs[w]<=3]
-    remove_ids = [dictionary.token2id[w] for w in low_tf_tokens]
-    dictionary.filter_tokens(remove_ids)
-    dictionary.compactify()  # remove gaps in id sequence after words that were removed
-    dictionary.save('your_savepath')
-
+    # low_tf_tokens = [w for w in freqs if freqs[w]<=3]
+    # remove_ids = [dictionary.token2id[w] for w in low_tf_tokens]
+    # dictionary.filter_tokens(remove_ids)
+    # dictionary.compactify()  # remove gaps in id sequence after words that were removed
+    dictionary.filter_extremes(no_below=5, no_above=0.1)
+    dictionary.save('./vocabs/vocab')
     bow_corpus = [dictionary.doc2bow(doc) for doc in corpus1]
     return dictionary, bow_corpus
 
+def visualizeLDA(model,bow_corpus):
+    graphLDA = pyLDAvis.gensim_models.prepare(model, bow_corpus, dictionary=model.id2word)  
+    pyLDAvis.save_html(graphLDA, './graph/lda-bow.html')
+    
 def backbone(transformer_type, corpus, dictionary, bow_corpus, model_path=''):
     #initialize feature extraction model
     new_corpus = []
@@ -65,8 +75,22 @@ def backbone(transformer_type, corpus, dictionary, bow_corpus, model_path=''):
         num_terms = len(dictionary.keys())
         print('length of fict keys',num_terms)
         new_corpus = corpus2dense(new_corpus, num_terms, num_docs)
+        
     elif transformer_type == 'LDA':
-        pass
+            # Set training parameters.
+            num_topics = 50
+            eval_every = 5
+
+            model = LdaModel(
+                corpus=bow_corpus,
+                id2word=dictionary,
+                alpha='auto',
+                num_topics=num_topics,
+                eval_every=eval_every
+            )
+            
+            visualizeLDA(model,bow_corpus)
+        
     else:
         train_corpus = [models.doc2vec.TaggedDocument(token, [i])for i, token in enumerate(corpus)]
         #print(train_corpus[:2])
@@ -107,24 +131,28 @@ def docClustering(transformer_type, model_path):
     gnd = dataset.target  # labels for clustering evaluation or supervised tasks length is 18846
     #semantic_labels = dataset.target_names
     dictionary, bow_corpus = prepare_corpus(corpus1)
-    true_k = np.unique(gnd).shape[0]
     new_corpus = backbone(transformer_type, corpus1, dictionary, bow_corpus,model_path)
-    #print(true_k)
-    km = KMeans(n_clusters = true_k,
-                          init = 'k-means++',
-                          max_iter = 5, n_init = 10)
-    km.fit(new_corpus)
-    clusters = km.labels_.tolist()
-    print(len(clusters))
-    sns.set_theme()
-    fig = plt.figure()
-    fig, ax = plt.subplots(1,1, figsize=(12,6))
+    
+    if(transformer_type !='LDA'):
+        true_k = np.unique(gnd).shape[0]
+        #print(true_k)
+        km = KMeans(n_clusters = true_k,
+                            init = 'k-means++',
+                            max_iter = 5, n_init = 10)
+        km.fit(new_corpus)
+        clusters = km.labels_.tolist()
+        print(len(clusters))
+        sns.set_theme()
+        fig = plt.figure()
+        fig, ax = plt.subplots(1,1, figsize=(12,6))
 
-    for i in range(len(new_corpus)):
-        ax.scatter(new_corpus[i,0],new_corpus[i,1],alpha=.8,label=clusters[i])
-    ax.legend(fancybox=True, framealpha=0.5)
-    fig.savefig('./temp.png', dpi=fig.dpi)
+        for i in range(len(new_corpus)):
+            ax.scatter(new_corpus[i,0],new_corpus[i,1],alpha=.8,label=clusters[i])
+        ax.legend(fancybox=True, framealpha=0.5)
+        fig.savefig('./temp.png', dpi=fig.dpi)
+    
 
 
 if __name__ == '__main__':
     docClustering('TF_IDF','')
+    # docClustering('LDA','')
