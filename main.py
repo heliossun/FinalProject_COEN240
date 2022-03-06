@@ -5,6 +5,8 @@ import pyLDAvis
 import pyLDAvis.gensim_models
 import collections
 import seaborn as sns
+import pandas as pd
+from collections import OrderedDict
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
@@ -19,8 +21,12 @@ from gensim.matutils import corpus2dense, corpus2csc
 from gensim.models import LdaModel
 from pprint import pprint
 from copy import deepcopy
+from bokeh.plotting import figure, output_file, show
+from bokeh.models import Label
+from bokeh.io import output_notebook, export_png
+import matplotlib.colors as mcolors
 
-
+TopicNum = 20
 def pre_processing(docs):
     tokenizer = RegexpTokenizer(r"\w+(?:[-'+]\w+)*|\w+")
     en_stop = get_stop_words('en')
@@ -57,12 +63,36 @@ def prepare_corpus(corpus1):
     return dictionary, bow_corpus
 
 
-def visualizeLDA(model, bow_corpus):
+def visualizeLDA(model, bow_corpus,TopicNum,gnd):
+    # pyLDAvis graph
     graphLDA = pyLDAvis.gensim_models.prepare(
         model, bow_corpus, dictionary=model.id2word)
     pyLDAvis.save_html(graphLDA, './graph/lda-bow.html')
-    return
-    return
+    # TSNE graph
+    top_dist =[]
+    for d in bow_corpus:
+        tmp = {i:0 for i in range(TopicNum)}
+        tmp.update(dict(model[d]))
+        vals = list(OrderedDict(tmp).values())
+        top_dist += [np.array(vals)]
+    top_dist = np.array(top_dist)
+    
+    # tSNE Dimension Reduction
+    tsne_model = TSNE(n_components=2)
+    tsne_lda = tsne_model.fit_transform(top_dist)
+
+    sns.set_theme()
+    topic_num=np.argmax(top_dist, axis=1)
+    output_notebook()
+    mycolors = np.array([color for name, color in mcolors.TABLEAU_COLORS.items()])
+    plot = figure(title="t-SNE Clustering of {} LDA Topics".format(TopicNum), 
+                plot_width=900, plot_height=700)
+    plot.scatter(x=tsne_lda[:,0], y=tsne_lda[:,1], color=mycolors[topic_num])
+    output_file("./graph/LDA_TSNE.html")
+    show(plot)
+    export_png(plot, filename="./graph/LDA_TSNE.png")
+
+    
 
 
 def backbone(transformer_type, corpus, dictionary, bow_corpus, model_path=''):
@@ -84,18 +114,19 @@ def backbone(transformer_type, corpus, dictionary, bow_corpus, model_path=''):
 
     elif transformer_type == 'LDA':
         # Set training parameters.
-        num_topics = 50
+        TopicNum = 10
         eval_every = 5
 
         model = LdaModel(
             corpus=bow_corpus,
             id2word=dictionary,
             alpha='auto',
-            num_topics=num_topics,
+            num_topics=TopicNum,
             eval_every=eval_every
         )
 
-        visualizeLDA(model, bow_corpus)
+        # visualizeLDA(model, bow_corpus, TopicNum)
+        return model
 
     else:
         train_corpus = [models.doc2vec.TaggedDocument(
@@ -144,7 +175,7 @@ def docClustering(transformer_type, model_path):
     corpus1 = list(pre_processing(corpus[:1000]))
     # labels for clustering evaluation or supervised tasks length is 18846
     gnd = dataset.target
-    #semantic_labels = dataset.target_names
+    semantic_labels = dataset.target_names
     dictionary, bow_corpus = prepare_corpus(corpus1)
     new_corpus = backbone(transformer_type, corpus1,
                           dictionary, bow_corpus, model_path)
@@ -167,8 +198,17 @@ def docClustering(transformer_type, model_path):
                        alpha=.8, label=clusters[i])
         ax.legend(fancybox=True, framealpha=0.5)
         fig.savefig('./temp.png', dpi=fig.dpi)
+    else:
+        # lda return model as new_corpus
+        # Visualize topics with at least two different methods
+        visualizeLDA(new_corpus, bow_corpus,TopicNum,gnd)
+        #  and get the topic distribution (as features) for each document
+        for bow in bow_corpus:
+            t = new_corpus.get_document_topics(bow)
+            print(t)
+    
 
 
 if __name__ == '__main__':
-    docClustering('TF_IDF', '')
-    # docClustering('LDA','')
+    # docClustering('TF_IDF', '')
+    docClustering('LDA','')
