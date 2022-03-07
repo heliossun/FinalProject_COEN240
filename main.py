@@ -42,14 +42,14 @@ def pre_processing(docs):
         yield doc
 
 
-def prepare_corpus(corpus1):
-    dictionary = corpora.Dictionary(corpus1)
+def prepare_corpus(corpus):
+    dictionary = corpora.Dictionary(corpus)
     #no_below (int, optional) – Keep tokens which are contained in at least no_below documents.
     #no_above (float, optional) – Keep tokens which are contained in no more than
     #no_above documents (fraction of total corpus size, not an absolute number).
     dictionary.filter_extremes(no_below=100, no_above=0.5)  #shape:(18846,2290)
     dictionary.save('./dictionary.dic')
-    bow_corpus = [dictionary.doc2bow(doc) for doc in corpus1]
+    bow_corpus = [dictionary.doc2bow(doc) for doc in corpus]
     return dictionary, bow_corpus
 
 
@@ -98,8 +98,29 @@ def visualizeWrd2V(model):
     plt.figure(figsize=(12,12))
     plt.scatter(x_vals,y_vals)
     for i in range(len(labels)):
-        plt.annotate(labels[i],(x_val[i],y_vals[i]))
-    plt.savefig(f"./workdir/Word2Vec_TSNE.png", dpi=fig.dpi)
+        plt.annotate(labels[i],(x_vals[i],y_vals[i]))
+    plt.savefig(f"./workdir/Word2Vec_TSNE.png")
+
+def KMeansCluster(X, gnd,transformer_type):
+    true_k = np.unique(gnd).shape[0]
+    km = KMeans(n_clusters=true_k,
+                    init='k-means++',
+                    max_iter=10, n_init=1)
+    km.fit(X)
+    clusters = km.labels_.tolist()
+    
+    X = X.toarray()
+    y_km = km.fit_predict(X)
+    for i in range (0,true_k):
+        plt.scatter(X[y_km==i, 0], X[y_km==i, 1],
+            s=20,
+            marker='o',
+            alpha=.8,
+            label='cluster ' + str(i)
+                    )
+    plt.legend(fancybox=True, framealpha=0.5,scatterpoints=1)
+    plt.grid()
+    plt.savefig(f"./workdir/{transformer_type}_KMeansCluster.png")      
 
 def TSNEVisualize(new_corpus,transformer_type, gnd,semantic_labels):
 
@@ -183,8 +204,6 @@ def backbone(transformer_type, corpus, dictionary, bow_corpus, model_path=''):
             print('>>>>>>>>>>>>>> model saved <<<<<<<<<<<<')
         return model
 
-
-
 def assesModel(model, train_corpus):
     ranks = []
     second_ranks = []
@@ -210,9 +229,11 @@ def docClustering(transformer_type, model_path):
     K = len(set(gnd))
     semantic_labels = list(range(K))
     dictionary, bow_corpus = prepare_corpus(corpus1)
-    #generate corpus of 4 different methods(TF-IDF, LDA, Doc2Vec, Word2Vec)
-    new_corpus = backbone(transformer_type, corpus1,
-                          dictionary, bow_corpus, model_path)
+    new_corpus = bow_corpus
+    if(transformer_type != "BOW"):
+        #generate corpus of 4 different methods(TF-IDF, LDA, Doc2Vec, Word2Vec)
+        new_corpus = backbone(transformer_type, corpus1,
+                            dictionary, bow_corpus, model_path)
 
     #TSNEvisualize (TF-IDF, Doc2Vec, Word2Vec)
     if transformer_type == 'LDA':
@@ -222,6 +243,12 @@ def docClustering(transformer_type, model_path):
         for bow in bow_corpus:
             t = new_corpus.get_document_topics(bow)
             print(t)
+    elif transformer_type == "BOW":
+        vectorizer = CountVectorizer(max_df=0.5,min_df=0.05,stop_words='english')
+    
+        X = vectorizer.fit_transform(dataset.data)
+        KMeansCluster(X, gnd, transformer_type)
+        
     elif transformer_type == 'W2V':
         visualizeWrd2V(new_corpus)
         #this new_corpus is W2V model actually
@@ -230,10 +257,6 @@ def docClustering(transformer_type, model_path):
             print(t)
     else:
         TSNEVisualize(new_corpus,transformer_type, gnd,semantic_labels)
-        #  and get the topic distribution (as features) for each document
-
-    #LDA visualize
-
 
     #clustering
     #true_k = np.unique(gnd).shape[0]
@@ -259,7 +282,7 @@ def docClustering(transformer_type, model_path):
 
 
 if __name__ == '__main__':
-    transformer_type = 'W2V'    #LDA/ D2V/ TF_IDF
+    transformer_type = 'BOW'    #LDA/ D2V/ TF_IDF/BOW
     model_path = './workdir/w2v_100_3_10.py'
     docClustering(transformer_type, model_path)
 
