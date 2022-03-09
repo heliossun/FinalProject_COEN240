@@ -8,7 +8,6 @@ import seaborn as sns
 import pandas as pd
 from collections import OrderedDict
 from sklearn.datasets import fetch_20newsgroups
-from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 from collections import defaultdict
 from nltk.tokenize import RegexpTokenizer
@@ -27,6 +26,8 @@ import matplotlib.cm as cm
 from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
 from sklearn.manifold import TSNE
 from mpl_toolkits.mplot3d import Axes3D
+from sklearn.metrics.cluster import normalized_mutual_info_score as nmi_score
+
 TopicNum = 20
 def pre_processing(docs):
     tokenizer = RegexpTokenizer(r"\w+(?:[-'+]\w+)*|\w+")
@@ -100,16 +101,15 @@ def visualizeWrd2V(model):
 
     plt.savefig(f"./workdir/Word2Vec_TSNE.png")
 
-def KMeansCluster(X, true_k,transformer_type):
+def KMeansCluster(X, gnd, true_k,transformer_type):
 
     print('>>>>>>>>>>>>>> k-means clustering begin <<<<<<<<<<<<')
     km = KMeans(n_clusters=true_k,
                     init='k-means++',
-                    max_iter=10, n_init=1)
+                    max_iter=30, n_init=1)
     km.fit(X)
+    print('NMI score: ', nmi_score(gnd,km.labels_))
     clusters = km.labels_.tolist()
-    if transformer_type=='BOW':
-        X = X.toarray()
     y_km = km.fit_predict(X)
     plt.figure(figsize=(12,12))
     for i in range (0,true_k):
@@ -159,7 +159,13 @@ def backbone(transformer_type, corpus, dictionary, bow_corpus, model_path=''):
         print('new corpus shape is : ',len(new_corpus),', ',num_terms)
         new_corpus = np.transpose(corpus2dense(new_corpus, num_terms, num_docs))
         return new_corpus
-
+    elif transformer_type == 'BOW':
+        num_docs = len(bow_corpus)
+        num_terms = len(dictionary.keys())
+        #transoform TD-IDF-BOW to vector representation
+        print('new corpus shape is : ',len(bow_corpus),', ',num_terms)
+        new_corpus = np.transpose(corpus2dense(bow_corpus, num_terms, num_docs))
+        return new_corpus
     elif transformer_type == 'LDA':
         # Set training parameters.
         TopicNum = 10
@@ -223,7 +229,7 @@ def term_f_dist(rawdata,newdata):
     dist=[]
     for i in range(len(rawdata)):
         if len(rawdata[i]) ==0 or len(newdata[i]) ==0:
-            print('intdex:', i, ' has zeros: raw val ',len(rawdata[i]),'-- new val ',len(newdata[i]))
+            #print('intdex:', i, ' has zeros: raw val ',len(rawdata[i]),'-- new val ',len(newdata[i]))
             dist.append(1)
         else:
             dist.append(len(newdata[i])/len(rawdata[i]))
@@ -254,8 +260,8 @@ def docClustering(transformer_type, model_path):
         #generate corpus of 4 different methods(TF-IDF, LDA, Doc2Vec, Word2Vec)
         new_corpus = backbone(transformer_type, corpus1,
                             dictionary, bow_corpus, model_path)
-        TSNEVisualize(new_corpus,transformer_type, gnd,semantic_labels)
-        KMeansCluster(new_corpus, true_k,transformer_type)
+        #TSNEVisualize(new_corpus,transformer_type, gnd,semantic_labels)
+        KMeansCluster(new_corpus, gnd, true_k,transformer_type)
 
     #TSNEvisualize (TF-IDF, Doc2Vec, Word2Vec)
     elif transformer_type == 'LDA':
@@ -268,11 +274,10 @@ def docClustering(transformer_type, model_path):
             t = new_corpus.get_document_topics(bow)
             print(t)
     elif transformer_type == "BOW":
-        vectorizer = CountVectorizer(max_df=0.5,min_df=0.05,stop_words='english')
-
-        X = vectorizer.fit_transform(dataset.data)
-        #print(X)
-        KMeansCluster(X, true_k, transformer_type)
+        new_corpus = backbone(transformer_type, corpus1,
+                            dictionary, bow_corpus, model_path)
+        #TSNEVisualize(new_corpus,transformer_type, gnd,semantic_labels
+        KMeansCluster(new_corpus, gnd, true_k,transformer_type)
 
 
     else:   #transformer_type == 'W2V'
@@ -281,34 +286,12 @@ def docClustering(transformer_type, model_path):
         visualizeWrd2V(model)
         #this new_corpus is W2V model actually
 
-    #TSNEvisualize(TF-IDF, Doc2Vec)
-
-
-
-    #clustering
-    #true_k = np.unique(gnd).shape[0]
-    # print(true_k)
-    #km = KMeans(n_clusters=true_k,
-                #init='k-means++',
-                #max_iter=5, n_init=10)
-    #km.fit(new_corpus)
-    #clusters = km.labels_.tolist()
-    #print(len(clusters))
-    #sns.set_theme()
-    #fig = plt.figure()
-    #fig, ax = plt.subplots(1, 1, figsize=(12, 6))
-
-    #for i in range(len(new_corpus)):
-        #ax.scatter(new_corpus[i, 0], new_corpus[i, 1],
-                   #alpha=.8, label=clusters[i])
-    #ax.legend(fancybox=True, framealpha=0.5)
-    #fig.savefig('./temp.png', dpi=fig.dpi)
 
 
 
 
 
 if __name__ == '__main__':
-    transformer_type = 'TF_IDF'    #LDA/ D2V/ TF_IDF/BOW/W2V/BOW
-    model_path = ''
+    transformer_type = 'D2V'    #LDA/ D2V/ TF_IDF/BOW/W2V/BOW
+    model_path = './workdir/d2v_100_3_40.py'
     docClustering(transformer_type, model_path)
