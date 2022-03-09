@@ -23,9 +23,10 @@ from bokeh.plotting import figure, output_file, show
 from bokeh.models import Label
 from bokeh.io import output_notebook, export_png
 import matplotlib.colors as mcolors
+import matplotlib.cm as cm
 from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
 from sklearn.manifold import TSNE
-
+from mpl_toolkits.mplot3d import Axes3D
 TopicNum = 20
 def pre_processing(docs):
     tokenizer = RegexpTokenizer(r"\w+(?:[-'+]\w+)*|\w+")
@@ -47,7 +48,7 @@ def prepare_corpus(corpus):
     #no_below (int, optional) – Keep tokens which are contained in at least no_below documents.
     #no_above (float, optional) – Keep tokens which are contained in no more than
     #no_above documents (fraction of total corpus size, not an absolute number).
-    dictionary.filter_extremes(no_below=100, no_above=0.5)  #shape:(18846,2290)
+    dictionary.filter_extremes(no_below=5, no_above=0.5, keep_n=2000)  #shape:(18846,24759)
     dictionary.save('./dictionary.dic')
     bow_corpus = [dictionary.doc2bow(doc) for doc in corpus]
     return dictionary, bow_corpus
@@ -83,34 +84,34 @@ def visualizeLDA(model, bow_corpus,TopicNum,gnd):
     export_png(plot, filename="./graph/LDA_TSNE.png")
 
 def visualizeWrd2V(model):
-    num_dimensions = 2
+    num_dimensions = 3
     labels = []
     tokens = []
-
+    colors = cm.rainbow(np.linspace(0, 1, 1))
     for word in model.wv.vocab:
         tokens.append(model[word])
         labels.append(word)
     # reduce using t-SNE
-    tsne = TSNE(n_components=num_dimensions, random_state=0)
+    tsne = TSNE(n_components=num_dimensions, init='pca', random_state=0)
     vectors = tsne.fit_transform(tokens)
-    x_vals = [v[0] for v in vectors]
-    y_vals = [v[1] for v in vectors]
-    plt.figure(figsize=(12,12))
-    plt.scatter(x_vals,y_vals)
-    for i in range(len(labels)):
-        plt.annotate(labels[i],(x_vals[i],y_vals[i]))
+    fig=plt.figure(figsize=(12,12))
+    ax=Axes3D(fig)
+    plt.scatter(vectors[:,0],vectors[:,1],vectors[:,2],c=colors,alpha=1,label=labels)
+
     plt.savefig(f"./workdir/Word2Vec_TSNE.png")
 
-def KMeansCluster(X, gnd,transformer_type):
-    true_k = np.unique(gnd).shape[0]
+def KMeansCluster(X, true_k,transformer_type):
+
+    print('>>>>>>>>>>>>>> k-means clustering begin <<<<<<<<<<<<')
     km = KMeans(n_clusters=true_k,
                     init='k-means++',
                     max_iter=10, n_init=1)
     km.fit(X)
     clusters = km.labels_.tolist()
-    
-    X = X.toarray()
+    if transformer_type=='BOW':
+        X = X.toarray()
     y_km = km.fit_predict(X)
+    plt.figure(figsize=(12,12))
     for i in range (0,true_k):
         plt.scatter(X[y_km==i, 0], X[y_km==i, 1],
             s=20,
@@ -120,13 +121,14 @@ def KMeansCluster(X, gnd,transformer_type):
                     )
     plt.legend(fancybox=True, framealpha=0.5,scatterpoints=1)
     plt.grid()
-    plt.savefig(f"./workdir/{transformer_type}_KMeansCluster.png")      
+    print('>>>>>>>>>>>>>> k-means clustering end <<<<<<<<<<<<')
+    plt.savefig(f"./workdir/{transformer_type}_KMeansCluster.png")
 
 def TSNEVisualize(new_corpus,transformer_type, gnd,semantic_labels):
-
+    print('>>>>>>>>>>>>>> TSNE visualization generating <<<<<<<<<<<<')
     tsne_model = TSNE(n_components=2)
     tsne_X = tsne_model.fit_transform(new_corpus)
-    print(len(tsne_X))
+    #print(len(tsne_X))
     k=len(set(gnd))
     sns.set_theme()
     fig = plt.figure()
@@ -134,6 +136,7 @@ def TSNEVisualize(new_corpus,transformer_type, gnd,semantic_labels):
     for i in range(k):
         ax.scatter(tsne_X[gnd==i,0], tsne_X[gnd==i,1], alpha=.8, label=semantic_labels[i])
     ax.legend(fancybox=True, framealpha=0.5)
+    print('>>>>>>>>>>>>>> TSNE Visualization saved <<<<<<<<<<<<')
     fig.savefig(f"./workdir/{transformer_type}_TSNE.png", dpi=fig.dpi)
 
 def backbone(transformer_type, corpus, dictionary, bow_corpus, model_path=''):
@@ -192,7 +195,7 @@ def backbone(transformer_type, corpus, dictionary, bow_corpus, model_path=''):
             model.save(f'./workdir/d2v_{vector_size}_{min_count}_{epochs}.py')
             #print('>>>>>>>>>>>>>> assessing the model <<<<<<<<<<<<')
             #assesModel(model, train_corpus)
-        new_corpus = [model.infer_vector(doc)for doc in corpus]
+        new_corpus = model.docvecs.doctag_syn0
         return new_corpus
     else: #Word2Vec
         if model_path != '':
@@ -216,7 +219,22 @@ def assesModel(model, train_corpus):
         second_ranks.append(sims[1])
     counter = collections.Counter(ranks)
     # print(counter)
-
+def term_f_dist(rawdata,newdata):
+    dist=[]
+    for i in range(len(rawdata)):
+        if len(rawdata[i]) ==0 or len(newdata[i]) ==0:
+            print('intdex:', i, ' has zeros: raw val ',len(rawdata[i]),'-- new val ',len(newdata[i]))
+            dist.append(1)
+        else:
+            dist.append(len(newdata[i])/len(rawdata[i]))
+    fig = plt.figure()
+    fig, ax = plt.subplots(1, 1, figsize=(20, 12))
+    ax.scatter([i for i in range(len(rawdata))],dist)
+    ax.legend(fancybox=True, framealpha=0.5)
+    ax.set_ylabel('term frequency(len(newtoken)/len(orgtoken))')
+    ax.set_xlabel('document(id)')
+    ax.set_title('Term Frequency Distribution')
+    fig.savefig(f"./workdir/term_f_dist.png", dpi=fig.dpi)
 
 def docClustering(transformer_type, model_path):
     # load dataset
@@ -224,20 +242,26 @@ def docClustering(transformer_type, model_path):
         subset='all', shuffle=False, remove=('headers', 'footers', 'quotes'))
     corpus = dataset.data  # save as the raw docs
     corpus1 = list(pre_processing(corpus))
+    term_f_dist(corpus, corpus1)
+    print(f'>>>>>>>>>dist plot saved<<<<<<<<<')
     # labels for clustering evaluation or supervised tasks length is 18846
     gnd = dataset.target
-    K = len(set(gnd))
-    semantic_labels = list(range(K))
+    true_k = np.unique(gnd).shape[0]
+    semantic_labels = list(range(true_k))
     dictionary, bow_corpus = prepare_corpus(corpus1)
     new_corpus = bow_corpus
-    if(transformer_type != "BOW"):
+    if(transformer_type == "TF_IDF" or transformer_type == "D2V"):
         #generate corpus of 4 different methods(TF-IDF, LDA, Doc2Vec, Word2Vec)
         new_corpus = backbone(transformer_type, corpus1,
                             dictionary, bow_corpus, model_path)
+        TSNEVisualize(new_corpus,transformer_type, gnd,semantic_labels)
+        KMeansCluster(new_corpus, true_k,transformer_type)
 
     #TSNEvisualize (TF-IDF, Doc2Vec, Word2Vec)
-    if transformer_type == 'LDA':
-        visualizeLDA(new_corpus, bow_corpus,TopicNum,gnd)
+    elif transformer_type == 'LDA':
+        model = backbone(transformer_type, corpus1,
+                            dictionary, bow_corpus, model_path)
+        visualizeLDA(model, bow_corpus,TopicNum,gnd)
         #this new_corpus is LDA model actually
         #  and get the topic distribution (as features) for each document
         for bow in bow_corpus:
@@ -245,18 +269,21 @@ def docClustering(transformer_type, model_path):
             print(t)
     elif transformer_type == "BOW":
         vectorizer = CountVectorizer(max_df=0.5,min_df=0.05,stop_words='english')
-    
+
         X = vectorizer.fit_transform(dataset.data)
-        KMeansCluster(X, gnd, transformer_type)
-        
-    elif transformer_type == 'W2V':
-        visualizeWrd2V(new_corpus)
+        #print(X)
+        KMeansCluster(X, true_k, transformer_type)
+
+
+    else:   #transformer_type == 'W2V'
+        model = backbone(transformer_type, corpus1,
+                            dictionary, bow_corpus, model_path)
+        visualizeWrd2V(model)
         #this new_corpus is W2V model actually
-        for bow in bow_corpus:
-            t = new_corpus.get_document_topics(bow)
-            print(t)
-    else:
-        TSNEVisualize(new_corpus,transformer_type, gnd,semantic_labels)
+
+    #TSNEvisualize(TF-IDF, Doc2Vec)
+
+
 
     #clustering
     #true_k = np.unique(gnd).shape[0]
@@ -282,7 +309,6 @@ def docClustering(transformer_type, model_path):
 
 
 if __name__ == '__main__':
-    transformer_type = 'BOW'    #LDA/ D2V/ TF_IDF/BOW
-    model_path = './workdir/w2v_100_3_10.py'
+    transformer_type = 'TF_IDF'    #LDA/ D2V/ TF_IDF/BOW/W2V/BOW
+    model_path = ''
     docClustering(transformer_type, model_path)
-
