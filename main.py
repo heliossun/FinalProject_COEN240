@@ -6,6 +6,7 @@ import pyLDAvis.gensim_models
 import collections
 import seaborn as sns
 import pandas as pd
+import gensim
 from collections import OrderedDict
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.cluster import KMeans
@@ -27,7 +28,7 @@ from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
 from sklearn.manifold import TSNE
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.metrics.cluster import normalized_mutual_info_score as nmi_score
-
+from pprint import pprint
 TopicNum = 20
 def pre_processing(docs):
     tokenizer = RegexpTokenizer(r"\w+(?:[-'+]\w+)*|\w+")
@@ -261,22 +262,27 @@ def docClustering(transformer_type, model_path):
         new_corpus = backbone(transformer_type, corpus1,
                             dictionary, bow_corpus, model_path)
         #TSNEVisualize(new_corpus,transformer_type, gnd,semantic_labels)
+        pprint(new_corpus)
         KMeansCluster(new_corpus, gnd, true_k,transformer_type)
 
     #TSNEvisualize (TF-IDF, Doc2Vec, Word2Vec)
     elif transformer_type == 'LDA':
         model = backbone(transformer_type, corpus1,
                             dictionary, bow_corpus, model_path)
-        visualizeLDA(model, bow_corpus,TopicNum,gnd)
+        # visualizeLDA(model, bow_corpus,TopicNum,gnd)
         #this new_corpus is LDA model actually
         #  and get the topic distribution (as features) for each document
-        for bow in bow_corpus:
-            t = new_corpus.get_document_topics(bow)
-            print(t)
+        # doc_lda = model[bow_corpus]
+        # pprint(model.print_topics())
+        all_topics = model.get_document_topics(bow_corpus)
+        all_topics_csr= gensim.matutils.corpus2csc(all_topics)
+        X= all_topics_csr.T.toarray()
+        KMeansCluster(X , gnd, true_k,transformer_type)
     elif transformer_type == "BOW":
         new_corpus = backbone(transformer_type, corpus1,
                             dictionary, bow_corpus, model_path)
         #TSNEVisualize(new_corpus,transformer_type, gnd,semantic_labels
+        pprint(new_corpus)
         KMeansCluster(new_corpus, gnd, true_k,transformer_type)
 
 
@@ -292,6 +298,6 @@ def docClustering(transformer_type, model_path):
 
 
 if __name__ == '__main__':
-    transformer_type = 'D2V'    #LDA/ D2V/ TF_IDF/BOW/W2V/BOW
+    transformer_type = 'LDA'    #LDA/ D2V/ TF_IDF/BOW/W2V/BOW
     model_path = './workdir/d2v_100_3_40.py'
     docClustering(transformer_type, model_path)
