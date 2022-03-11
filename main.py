@@ -6,7 +6,6 @@ import pyLDAvis.gensim_models
 import collections
 import seaborn as sns
 import pandas as pd
-import gensim
 from collections import OrderedDict
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.cluster import KMeans
@@ -28,7 +27,9 @@ from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
 from sklearn.manifold import TSNE
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.metrics.cluster import normalized_mutual_info_score as nmi_score
-from pprint import pprint
+from TransformerModel import *
+import torch
+import math
 TopicNum = 20
 def pre_processing(docs):
     tokenizer = RegexpTokenizer(r"\w+(?:[-'+]\w+)*|\w+")
@@ -243,7 +244,7 @@ def term_f_dist(rawdata,newdata):
     ax.set_title('Term Frequency Distribution')
     fig.savefig(f"./workdir/term_f_dist.png", dpi=fig.dpi)
 
-def docClustering(transformer_type, model_path):
+def featureEmbedding(transformer_type, model_path):
     # load dataset
     dataset = fetch_20newsgroups(
         subset='all', shuffle=False, remove=('headers', 'footers', 'quotes'))
@@ -253,6 +254,7 @@ def docClustering(transformer_type, model_path):
     print(f'>>>>>>>>>dist plot saved<<<<<<<<<')
     # labels for clustering evaluation or supervised tasks length is 18846
     gnd = dataset.target
+
     true_k = np.unique(gnd).shape[0]
     semantic_labels = list(range(true_k))
     dictionary, bow_corpus = prepare_corpus(corpus1)
@@ -261,28 +263,24 @@ def docClustering(transformer_type, model_path):
         #generate corpus of 4 different methods(TF-IDF, LDA, Doc2Vec, Word2Vec)
         new_corpus = backbone(transformer_type, corpus1,
                             dictionary, bow_corpus, model_path)
+        print(len(new_corpus),', ',len(new_corpus[0]))
         #TSNEVisualize(new_corpus,transformer_type, gnd,semantic_labels)
-        pprint(new_corpus)
-        KMeansCluster(new_corpus, gnd, true_k,transformer_type)
-
+        #KMeansCluster(new_corpus, gnd, true_k,transformer_type)
+        return new_corpus, gnd
     #TSNEvisualize (TF-IDF, Doc2Vec, Word2Vec)
     elif transformer_type == 'LDA':
         model = backbone(transformer_type, corpus1,
                             dictionary, bow_corpus, model_path)
-        # visualizeLDA(model, bow_corpus,TopicNum,gnd)
+        visualizeLDA(model, bow_corpus,TopicNum,gnd)
         #this new_corpus is LDA model actually
         #  and get the topic distribution (as features) for each document
-        # doc_lda = model[bow_corpus]
-        # pprint(model.print_topics())
-        all_topics = model.get_document_topics(bow_corpus)
-        all_topics_csr= gensim.matutils.corpus2csc(all_topics)
-        X= all_topics_csr.T.toarray()
-        KMeansCluster(X , gnd, true_k,transformer_type)
+        for bow in bow_corpus:
+            t = new_corpus.get_document_topics(bow)
+            print(t)
     elif transformer_type == "BOW":
         new_corpus = backbone(transformer_type, corpus1,
                             dictionary, bow_corpus, model_path)
         #TSNEVisualize(new_corpus,transformer_type, gnd,semantic_labels
-        pprint(new_corpus)
         KMeansCluster(new_corpus, gnd, true_k,transformer_type)
 
 
@@ -291,6 +289,18 @@ def docClustering(transformer_type, model_path):
                             dictionary, bow_corpus, model_path)
         visualizeWrd2V(model)
         #this new_corpus is W2V model actually
+def data_loader(transformer_type, model_path):
+    docRepresent, label = featureEmbedding(transformer_type, model_path)
+    dataset = [torch.tensor(tuple(doc,gnd))for doc in docRepresent for gnd in label]
+    train = math.ceil(len(dataset*0.7))
+    validate=math.ceil(len(dataset*0.2))
+    print(dataset[0])
+def batchify(data, batch_size):
+
+def get_batch(source,i):
+
+def train(transformer_type, model_path):
+    data_loader(transformer_type, model_path)
 
 
 
@@ -298,6 +308,6 @@ def docClustering(transformer_type, model_path):
 
 
 if __name__ == '__main__':
-    transformer_type = 'LDA'    #LDA/ D2V/ TF_IDF/BOW/W2V/BOW
+    transformer_type = 'D2V'    #LDA/ D2V/ TF_IDF/BOW/W2V/BOW
     model_path = './workdir/d2v_100_3_40.py'
-    docClustering(transformer_type, model_path)
+    train(transformer_type, model_path)
