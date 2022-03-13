@@ -5,26 +5,21 @@ import pyLDAvis
 import pyLDAvis.gensim_models
 import collections
 import seaborn as sns
-import pandas as pd
 from sklearn.naive_bayes import MultinomialNB
 from collections import OrderedDict
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.cluster import KMeans
-from collections import defaultdict
 from nltk.tokenize import RegexpTokenizer
-from nltk.stem.porter import PorterStemmer
 from stop_words import get_stop_words
 from gensim import corpora
-from gensim.parsing.preprocessing import remove_stopwords, preprocess_string
 from gensim import models
-from gensim.matutils import corpus2dense, corpus2csc
+from gensim.matutils import corpus2dense
 from gensim.models import LdaModel
 from bokeh.plotting import figure, output_file, show
-from bokeh.models import Label
 from bokeh.io import output_notebook, export_png
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
-from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer, TfidfVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.manifold import TSNE
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.metrics.cluster import normalized_mutual_info_score as nmi_score
