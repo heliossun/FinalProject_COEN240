@@ -9,7 +9,6 @@ import pandas as pd
 from sklearn.naive_bayes import MultinomialNB
 from collections import OrderedDict
 from sklearn.datasets import fetch_20newsgroups
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
 from collections import defaultdict
 from nltk.tokenize import RegexpTokenizer
@@ -25,11 +24,10 @@ from bokeh.models import Label
 from bokeh.io import output_notebook, export_png
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
-from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
+from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer, TfidfVectorizer
 from sklearn.manifold import TSNE
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.metrics.cluster import normalized_mutual_info_score as nmi_score
-from TransformerModel import *
 import torch
 import math
 TopicNum = 20
