@@ -13,18 +13,21 @@ from nltk.tokenize import RegexpTokenizer
 from stop_words import get_stop_words
 from gensim import corpora
 from gensim import models
-from gensim.matutils import corpus2dense
+from gensim.matutils import corpus2dense, corpus2csc
 from gensim.models import LdaModel
 from bokeh.plotting import figure, output_file, show
 from bokeh.io import output_notebook, export_png
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
 from sklearn.manifold import TSNE
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.metrics.cluster import normalized_mutual_info_score as nmi_score
+from sklearn.linear_model import SGDClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import classification_report
+from sklearn.feature_extraction.text import TfidfVectorizer
 import torch
-import math
 TopicNum = 20
 
 
@@ -275,10 +278,8 @@ def term_f_dist(rawdata, newdata):
     ax.set_title('Term Frequency Distribution')
     fig.savefig(f"./workdir/term_f_dist.png", dpi=fig.dpi)
 
-def featureEmbedding(transformer_type, model_path):
+def featureEmbedding(dataset,transformer_type, model_path):
     # load dataset
-    dataset = fetch_20newsgroups(
-        subset='all', shuffle=False, remove=('headers', 'footers', 'quotes'))
     corpus = dataset.data  # save as the raw docs
     corpus1 = list(pre_processing(corpus))
     term_f_dist(corpus, corpus1)
@@ -321,22 +322,35 @@ def featureEmbedding(transformer_type, model_path):
         # this new_corpus is W2V model actually
 
 
-def data_loader(transformer_type, model_path):
-    docRepresent, label = featureEmbedding(transformer_type, model_path)
-    dataset = [torch.tensor(tuple(doc, gnd))
-               for doc in docRepresent for gnd in label]
-    train = math.ceil(len(dataset*0.7))
-    validate = math.ceil(len(dataset*0.2))
-    print(dataset[0])
 
-
-def train(transformer_type, model_path):
-    if(transformer_type == "BONUS"):
+def train(task):
+    if task == 'BONUS':
         bonus()
-    else:
-        data_loader(transformer_type, model_path)
+    elif task == 'clustering':
+        dataset = fetch_20newsgroups(
+            subset='all', shuffle=False, remove=('headers', 'footers', 'quotes'))
+        transformer_type = 'D2V'  # LDA/ D2V/ TF_IDF/BOW/W2V/BOW
+        model_path = './workdir/d2v_100_3_40.py'
+        featureEmbedding(dataset, transformer_type, model_path)
+    else:   #classification
+        device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+        # generate data
+        dataset_train = fetch_20newsgroups(
+            subset='train', shuffle=False, remove=('headers', 'footers', 'quotes'))
+        dataset_test = fetch_20newsgroups(subset='test', shuffle=True, random_state=42)
+        svm_clf = Pipeline([('vect', CountVectorizer()),
+                            ('tfidf', TfidfTransformer()),
+                            ('clf', SGDClassifier(loss='hinge', penalty='l2',
+                                                  alpha=1e-3, random_state=42,
+                                                  max_iter=100, tol=None)), ])
+        svm_clf.fit(dataset_train.data,dataset_train.target)
+        preds = svm_clf.predict(dataset_test.data)
+        acc = np.mean(preds == dataset_test.target)
+        print('Accuracy = ', acc)
+        report = classification_report(dataset_test.target, preds, target_names=dataset_test.target_names)
+        print(report)
 
 if __name__ == '__main__':
-    transformer_type = 'BONUS'  # LDA/ D2V/ TF_IDF/BOW/W2V/BOW
-    model_path = '' #./workdir/d2v_100_3_40.py
-    train(transformer_type, model_path)
+
+    train('class')
+    # 'BONUS'/ 'cluster'/ 'classify'
